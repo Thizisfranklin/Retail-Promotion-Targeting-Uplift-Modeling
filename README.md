@@ -9,7 +9,7 @@
 
 ---
 
-## Where This Started
+## Context & Motivation
 
 This project started from a simple observation: two similar restaurants, same neighborhood, different prices on the app — and the cheaper one wasn't necessarily better. That raised a question worth digging into.
 
@@ -131,7 +131,7 @@ Python · Pandas · NumPy · Statsmodels · Scikit-learn
 SQL · PostgreSQL
 
 **Dashboard**
-Plotly Dash ( and if necessary PowerBI - to enable me understand the differences in their visualization) 
+Plotly Dash/ PowerBI
 
 ---
 
