@@ -1,5 +1,4 @@
-# Food Retail Promotion & Customer Targeting Intelligence
-
+# Retail Promotion Targeting & Uplift Modeling
 > A decision-science project evaluating whether retail promotions generate incremental purchases and identifying which customers are most likely to change their purchasing behavior because of an intervention.
 
 Promotions are everywhere, but as a customer it is not obvious how companies decide **who should receive them** or whether those promotions actually change behavior.
