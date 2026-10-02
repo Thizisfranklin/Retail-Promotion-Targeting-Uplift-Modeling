@@ -7,7 +7,12 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from src.analysis import SEGMENT_DIMS
-from src.config import ARM_LABEL, ARMS, CONTROL, DB
+from src.config import ARM_LABEL, ARMS, CONTROL, DB as LOCAL_DB
+from src.export_public import PUBLIC_DB
+
+# In Codespaces read full local results; Streamlit Community Cloud reads only
+# the exported, aggregated public database committed explicitly by the owner.
+DB = LOCAL_DB if LOCAL_DB.exists() else PUBLIC_DB
 from src.presentation import campaign_evidence, targeting_evidence, targeting_budget_evidence
 
 COL = {CONTROL: "#8c8c8c", "Mens E-Mail": "#1f77b4", "Womens E-Mail": "#d6336c"}
@@ -30,7 +35,9 @@ def load(table):
 
 
 if not DB.exists():
-    st.error("Database not found. Run `python -m src.pipeline` first (see README).")
+    st.error("No analysis available. For local use: `python -m src.pipeline`. "
+             "For public deployment: audit real data, then run `python -m src.export_public` "
+             "and commit `data/dashboard.db` (see README).")
     st.stop()
 
 source = load("meta").set_index("key").value["source"]
