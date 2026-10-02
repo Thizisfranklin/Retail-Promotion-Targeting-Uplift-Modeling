@@ -9,7 +9,7 @@ import sqlite3
 
 import numpy as np
 import pandas as pd
-from scipy.stats import chi2_contingency
+from scipy.stats import binomtest, chi2_contingency
 
 from .config import ARMS, CONTROL, DB
 
@@ -54,6 +54,13 @@ def audit(db=DB, require_real=False):
                 raise AuditError(f"Group count mismatch: {arm} / {outcome}")
             if not np.isclose(saved.iloc[0]["mean"], row[outcome], atol=1e-10):
                 raise AuditError(f"Group mean mismatch: {arm} / {outcome}")
+            if outcome in ("conversion", "visit"):
+                # SciPy's independent binomtest implementation of a Wilson CI.
+                successes = int(customers.loc[customers.arm == arm, outcome].sum())
+                ci = binomtest(successes, int(row['n'])).proportion_ci(method='wilson')
+                if not (np.isclose(saved.iloc[0]['lo'], ci.low, atol=1e-9)
+                        and np.isclose(saved.iloc[0]['hi'], ci.high, atol=1e-9)):
+                    raise AuditError(f"Group confidence interval mismatch: {arm} / {outcome}")
 
     print("\nINDEPENDENT TREATMENT-CONTROL CHECK")
     control = customers[customers.arm == CONTROL]
@@ -66,6 +73,17 @@ def audit(db=DB, require_real=False):
                 raise AuditError(f"Stored treatment effect mismatch: {arm} / {outcome}")
             if saved.iloc[0]["lo"] > saved.iloc[0]["hi"]:
                 raise AuditError(f"Reversed confidence interval: {arm} / {outcome}")
+            if outcome in ('conversion', 'visit'):
+                # Independently verify Newcombe's unpooled treatment-effect CI
+                # using SciPy Wilson intervals rather than src.analysis.wilson.
+                t_ci = binomtest(int(treated[outcome].sum()), len(treated)).proportion_ci(method='wilson')
+                c_ci = binomtest(int(control[outcome].sum()), len(control)).proportion_ci(method='wilson')
+                pt, pc = treated[outcome].mean(), control[outcome].mean()
+                independent_lo = direct_diff - np.hypot(pt-t_ci.low, c_ci.high-pc)
+                independent_hi = direct_diff + np.hypot(t_ci.high-pt, pc-c_ci.low)
+                if not (np.isclose(saved.iloc[0]['lo'], independent_lo, atol=1e-9)
+                        and np.isclose(saved.iloc[0]['hi'], independent_hi, atol=1e-9)):
+                    raise AuditError(f"Treatment-effect confidence interval mismatch: {arm} / {outcome}")
             if outcome == "conversion":
                 # Independent chi-square sanity check of the conversion comparison.
                 hits = [int(treated.conversion.sum()), int(control.conversion.sum())]

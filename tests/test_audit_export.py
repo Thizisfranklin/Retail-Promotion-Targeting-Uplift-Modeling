@@ -23,6 +23,13 @@ def test_audit_checks_aggregate_and_holdout(tmp_path):
         con.execute("UPDATE campaign_effects SET diff=2 WHERE arm='Mens E-Mail' AND outcome='conversion'")
     with pytest.raises(AuditError, match='Stored treatment effect mismatch'):
         audit(db)
+    with sqlite3.connect(db) as con:
+        rows = con.execute("SELECT arm, AVG(conversion) FROM customers GROUP BY arm").fetchall()
+        rates = dict(rows)
+        real_diff = rates['Mens E-Mail'] - rates['No E-Mail']
+        con.execute("UPDATE campaign_effects SET diff=?, hi=hi+0.05 WHERE arm='Mens E-Mail' AND outcome='conversion'", (real_diff,))
+    with pytest.raises(AuditError, match='Treatment-effect confidence interval mismatch'):
+        audit(db)
 
 
 def test_export_only_aggregates(tmp_path, monkeypatch):

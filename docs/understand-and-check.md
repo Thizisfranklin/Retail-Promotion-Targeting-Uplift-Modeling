@@ -12,7 +12,7 @@ Suppose a customer purchases after receiving an email. Would they have purchased
 
 From the verified dashboard run, roughly **0.57%** of customers assigned no email purchased, compared with **1.25%** for the men's email and **0.89%** for the women's email. The *difference* is the estimated average incremental effect: about **+0.68 percentage points** and **+0.31 percentage points**, respectively. This is **not** a 0.68% or 0.31% relative gain. The app separately reports website visits and average spend **per assigned person**, not profit.
 
-**Check:** The audit performs the subtraction again using raw saved group outcomes, checks it matches `campaign_effects`, and compares the binary-outcome p-value with an independent chi-square calculation. The app's Wilson and Newcombe confidence intervals are more suitable than simple Wald intervals for these low conversion rates.
+**Check:** The audit performs the subtraction again using raw saved group outcomes, checks it matches `campaign_effects`, independently recalculates the reported confidence intervals using SciPy, and compares the binary-outcome p-value with an independent chi-square calculation. The app's Wilson and Newcombe confidence intervals are more suitable than simple Wald intervals for these low conversion rates.
 
 ## 3. What are the customer charts saying?
 
