@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="790" height="260" viewBox="0 0 790 260" role="img" aria-label="Historical conversion rates: no email 0.57%, men's email 1.25%, women's email 0.89%">
+<rect width="790" height="260" rx="12" fill="#f8fafc"/>
+<text x="32" y="32" font-size="16" fill="#182b49" font-family="Arial,sans-serif" font-weight="bold">Purchase rates by experiment group</text>
+<text x="32" y="56" font-size="12" fill="#5c6b7a" font-family="Arial,sans-serif">Real Hillstrom experiment · approximately rounded figures · 2008</text>
+<g stroke="#dde4eb" stroke-width="1"><line x1="55" x2="748" y1="209" y2="209"/><line x1="55" x2="748" y1="150" y2="150"/><line x1="55" x2="748" y1="91" y2="91"/></g>
+<g fill="#617083" font-family="Arial,sans-serif" font-size="12"><text x="23" y="212">0%</text><text x="20" y="153">0.7%</text><text x="20" y="94">1.4%</text></g>
+<g><rect x="118" y="161" width="120" height="48" fill="#8a9099"/><rect x="339" y="104" width="120" height="105" fill="#3176af"/><rect x="560" y="134" width="120" height="75" fill="#cf2e69"/></g>
+<g fill="#182b49" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold"><text x="178" y="151">0.57%</text><text x="399" y="94">1.25%</text><text x="620" y="124">0.89%</text></g>
+<g fill="#394a5d" text-anchor="middle" font-family="Arial,sans-serif" font-size="13"><text x="178" y="233">No email</text><text x="399" y="233">Men's email</text><text x="620" y="233">Women's email</text></g>
+</svg>

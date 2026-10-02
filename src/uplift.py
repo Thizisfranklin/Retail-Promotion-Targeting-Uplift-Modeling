@@ -96,7 +96,7 @@ def evaluate(y, t, score, B=300, seed=SEED):
 def run_uplift(db=DB):
     with sqlite3.connect(db) as con:
         df = pd.read_sql("SELECT arm, conversion, " + ", ".join(FEATURES) + " FROM customers", con)
-        curves, summ, groups, sel = [], [], [], []
+        curves, summ, groups, sel, holdout = [], [], [], [], []
         for arm in ARMS:
             d = df[df.arm.isin([arm, CONTROL])].reset_index(drop=True)
             t, y, X = (d.arm == arm).astype(int).values, d.conversion.values, d[FEATURES]
@@ -111,6 +111,12 @@ def run_uplift(db=DB):
             best = max(val, key=val.get)
             s_te = fitted[best].predict(X.iloc[i_te])
             yt, tt = y[i_te], t[i_te]
+            # Save anonymized held-out outcomes/scores locally for an independent audit.
+            # Do not export this row-level table to the public dashboard.
+            order = np.argsort(-s_te, kind="stable")
+            holdout.append(pd.DataFrame({"arm": arm, "rank": np.arange(len(order)),
+                                        "score": s_te[order], "treatment": tt[order],
+                                        "conversion": yt[order]}))
             curve, auuc, ci = evaluate(yt, tt, s_te)
             curve.insert(0, "arm", arm)
             curves.append(curve)
@@ -126,6 +132,7 @@ def run_uplift(db=DB):
                 se = np.sqrt(a.var(ddof=1) / len(a) + b.var(ddof=1) / len(b))
                 groups.append({"arm": arm, "group": f"Top {k*20-19}-{k*20}%" if k > 1 else "Top 20%", "n": int(m.sum()),
                                "pred_uplift": s_te[m].mean(), "obs_uplift": a.mean() - b.mean(), "se": se})
+        pd.concat(holdout, ignore_index=True).to_sql("uplift_holdout", con, if_exists="replace", index=False)
         pd.concat(curves).to_sql("uplift_curves", con, if_exists="replace", index=False)
         pd.DataFrame(summ).to_sql("uplift_summary", con, if_exists="replace", index=False)
         pd.DataFrame(sel).to_sql("uplift_model_selection", con, if_exists="replace", index=False)
