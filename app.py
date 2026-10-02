@@ -8,6 +8,7 @@ from plotly.subplots import make_subplots
 
 from src.analysis import SEGMENT_DIMS
 from src.config import ARM_LABEL, ARMS, CONTROL, DB
+from src.presentation import campaign_evidence, targeting_evidence, targeting_budget_evidence
 
 COL = {CONTROL: "#8c8c8c", "Mens E-Mail": "#1f77b4", "Womens E-Mail": "#d6336c"}
 OUT = {"conversion": "Purchase rate", "visit": "Website visit rate", "spend": "Average spend ($)"}
@@ -38,6 +39,35 @@ st.caption("Randomized email experiment (Hillstrom): customers were randomly sen
            "or no email, then tracked for two weeks.")
 if source != "hillstrom":
     st.warning("SYNTHETIC DEMO DATA - numbers below are fake and for testing the app only.")
+else:
+    st.caption("Historical 2008 experiment · Real Hillstrom data · Not a live marketing campaign")
+
+# Executive summary is always computed from the *currently loaded* database.
+# Never hardcode real-data results: someone can run --synthetic after a real run.
+conv_effects = load("campaign_effects").query("outcome == 'conversion'").set_index("arm")
+uplift_overall = load("uplift_summary").set_index("arm")
+num_customers = int(load("meta").set_index("key").loc["n_rows", "value"])
+st.subheader("Executive summary")
+st.write(f"**{num_customers:,} customers** were assigned to a men's email, a women's email, "
+         "or no email. Conversion (a purchase within two weeks) is the primary outcome.")
+summary_columns = st.columns(3)
+for column, arm in zip(summary_columns[:2], ARMS):
+    finding = conv_effects.loc[arm]
+    column.metric(f"{ARM_LABEL[arm]}: incremental purchases",
+                  f"{finding['diff'] * 100:+.2f} pp")
+    column.caption(f"95% CI {finding['lo'] * 100:+.2f} to {finding['hi'] * 100:+.2f} pp. "
+                   f"{campaign_evidence(finding['lo'], finding['hi'])}.")
+no_clear_advantage = all(uplift_overall.loc[arm, "auuc_lo"] <= 0 <= uplift_overall.loc[arm, "auuc_hi"]
+                         for arm in ARMS)
+summary_columns[2].metric("Model-based targeting",
+                          "Not established" if no_clear_advantage else "See held-out results")
+summary_columns[2].caption(
+    "Neither email model shows a clear held-out advantage over random targeting."
+    if no_clear_advantage else "Results differ by campaign; see the held-out intervals below."
+)
+st.info("**What this means:** These emails can change average purchasing behavior, "
+        "but that alone does not demonstrate that a model can reliably identify which individuals "
+        "to target. The experiment did not measure sending costs or profit.")
 
 # ---------- 1. Campaign effectiveness ----------
 st.header("1. Did the emails actually increase purchases?")
@@ -102,38 +132,60 @@ camp3 = st.selectbox("Campaign", list(ARMS), format_func=ARM_LABEL.get, key="c3"
 cv = load("uplift_curves").query("arm==@camp3")
 sm = load("uplift_summary").query("arm==@camp3").iloc[0]
 f = st.slider("Share of customers to email (highest predicted effect first)", 5, 100, 30, 5, format="%d%%") / 100
-fig = go.Figure()
-fig.add_scatter(x=cv.frac * 100, y=cv.model_hi, line=dict(width=0), showlegend=False, hoverinfo="skip")
-fig.add_scatter(x=cv.frac * 100, y=cv.model_lo, fill="tonexty", fillcolor="rgba(0,150,136,.18)", line=dict(width=0),
-                name="Model 95% CI", hoverinfo="skip")
-fig.add_scatter(x=cv.frac * 100, y=cv.model, name="Model-based targeting", line=dict(color="#009688", width=3),
-                hovertemplate="Email top %{x:.0f}%<br>%{y:.2f} extra purchases per 1,000 customers<extra></extra>")
-fig.add_scatter(x=cv.frac * 100, y=cv.random, name="Random targeting", line=dict(color="#888", dash="dash"))
+# One primary figure with two coordinated views. The lower panel exposes the
+# decision-relevant model-minus-random *gap* and its uncertainty.
+fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.13,
+                    row_heights=[0.67, 0.33],
+                    subplot_titles=("Estimated incremental purchases", "Model minus random (including uncertainty)"))
+x = cv.frac * 100
+fig.add_scatter(x=x, y=cv.model_hi, line=dict(width=0), showlegend=False, hoverinfo="skip", row=1, col=1)
+fig.add_scatter(x=x, y=cv.model_lo, fill="tonexty", fillcolor="rgba(0,150,136,.15)", line=dict(width=0),
+                name="Model pointwise 95% CI", hoverinfo="skip", row=1, col=1)
+fig.add_scatter(x=x, y=cv.model, name="Model-based targeting", line=dict(color="#009688", width=3),
+                hovertemplate="Email top %{x:.0f}%<br>%{y:.2f} extra purchases per 1,000 eligible customers<extra></extra>",
+                row=1, col=1)
+fig.add_scatter(x=x, y=cv.random, name="Random targeting (same budget)",
+                line=dict(color="#666", dash="dash"), row=1, col=1)
 end = cv.iloc[-1]
-fig.add_scatter(x=[100], y=[end.model], mode="markers", name="Send to everyone",
-                marker=dict(size=13, symbol="diamond", color="#333"))
-fig.add_vline(x=f * 100, line_color="#e8590c", opacity=.6)
-fig.update_layout(height=420, xaxis_title="Share of customers emailed (%)", margin=dict(t=20, b=10),
-                  yaxis_title="Extra purchases per 1,000 customers (held-out test set)", legend=dict(orientation="h", y=1.12))
+fig.add_scatter(x=[100], y=[end.model], mode="markers", name="Email everyone (100% budget)",
+                marker=dict(size=12, symbol="diamond", color="#292929"), row=1, col=1)
+fig.add_scatter(x=x, y=cv.gap_hi, line=dict(width=0), showlegend=False, hoverinfo="skip", row=2, col=1)
+fig.add_scatter(x=x, y=cv.gap_lo, line=dict(width=0), fill="tonexty", fillcolor="rgba(20,93,173,.16)",
+                name="Gap pointwise 95% CI", hoverinfo="skip", row=2, col=1)
+fig.add_scatter(x=x, y=cv.gap, name="Model minus random", line=dict(color="#145dad", width=2),
+                hovertemplate="Email top %{x:.0f}%<br>Gap: %{y:+.2f} per 1,000 eligible customers<extra></extra>",
+                row=2, col=1)
+fig.add_hline(y=0, line_color="#555", line_dash="dash", row=2, col=1)
+for row in (1, 2):
+    fig.add_vline(x=f * 100, line_color="#e8590c", opacity=.8, row=row, col=1)
+fig.update_layout(height=620, margin=dict(t=60, b=20, l=10, r=10),
+                  legend=dict(orientation="h", y=1.10, x=0, font=dict(size=11)))
+fig.update_yaxes(title_text="Extra purchases / 1,000 eligible", row=1, col=1)
+fig.update_yaxes(title_text="Difference / 1,000", row=2, col=1)
+fig.update_xaxes(title_text="Share of eligible customers emailed (%)", row=2, col=1)
 st.plotly_chart(fig, width="stretch")
 r = cv.iloc[(cv.frac - f).abs().argmin()]
 m = st.columns(3)
-m[0].metric("Model-based", f"{r.model:.2f}", help="Extra purchases per 1,000 customers in the audience")
-m[1].metric("Random targeting", f"{r.random:.2f}")
-m[2].metric("Send to everyone", f"{end.model:.2f}")
-verdict = ("estimated higher than" if r.gap_lo > 0 else
-           "estimated lower than" if r.gap_hi < 0 else
-           "not clearly different from")
-st.info(f"At {f:.0%} of customers, model targeting is **{verdict}** random targeting "
-        f"(gap {r.gap:+.2f}, 95% CI {r.gap_lo:+.2f} to {r.gap_hi:+.2f} per 1,000). "
-        f"Overall model-vs-random area: {sm.test_auuc_gap:+.2f} (95% CI {sm.auuc_lo:+.2f} to {sm.auuc_hi:+.2f})"
-        + (" - overall evidence favors model targeting." if sm.auuc_lo > 0 else
-           " - overall evidence favors random targeting." if sm.auuc_hi < 0 else
-           " - overall evidence of an advantage is inconclusive."))
-st.caption("Emailing a smaller group generally yields fewer total extra purchases than emailing everyone unless some customers "
-           "are harmed by the email; savings come from lower sending cost, which is not modelled here. "
-           f"Selected model: {sm.selected_model} (chosen on validation data). Test set: {int(sm.n_test):,} customers. "
-           "These are estimates from one experiment; a rollout needs a fresh controlled test.")
+m[0].metric("Model (chosen budget)", f"{r.model:.2f}",
+            help="Estimated extra purchases per 1,000 eligible customers, not per 1,000 emailed")
+m[1].metric("Random (same budget)", f"{r.random:.2f}")
+m[2].metric("Difference: model - random", f"{r.gap:+.2f}",
+            help=f"95% pointwise bootstrap CI {r.gap_lo:+.2f} to {r.gap_hi:+.2f}")
+st.write(f"**At {f:.0%} coverage:** {targeting_budget_evidence(r.gap_lo, r.gap_hi)}. "
+         f"Estimated gap: {r.gap:+.2f} extra purchases per 1,000 eligible customers "
+         f"(95% CI {r.gap_lo:+.2f} to {r.gap_hi:+.2f}).")
+st.info(f"**Across all tested budgets:** {targeting_evidence(sm.auuc_lo, sm.auuc_hi)}. "
+        f"Area between model and random curves (AUUC gap): {sm.test_auuc_gap:+.2f} "
+        f"(95% CI {sm.auuc_lo:+.2f} to {sm.auuc_hi:+.2f}). "
+        "If an interval spans zero, the observed difference could reflect sampling noise. "
+        "Do not choose the most flattering test-set budget after seeing these results.")
+st.caption(f"**Different budget:** Sending to everyone (100% coverage) is estimated at "
+           f"{end.model:.2f} extra purchases per 1,000 eligible customers. "
+           "It is NOT an equal-budget alternative to emailing a smaller group: a fair comparison "
+           "holds the share emailed constant. Sending costs and profit were not measured. "
+           f"Selected model: {sm.selected_model} (chosen using validation data). "
+           f"Held-out test: {int(sm.n_test):,} customers. Bands are pointwise bootstrap estimates "
+           "conditional on this fitted model and test split; a rollout would require a new controlled test.")
 with st.expander("Method details and sanity checks"):
     st.write("Customers split 60% train / 20% validation / 20% test, stratified. Only pre-email features are used "
              "(recency, past spend, past purchases, new customer, area, channel).")

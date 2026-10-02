@@ -1,6 +1,6 @@
 # Retail Marketing Intelligence — Customer Targeting & Incremental Impact
 
-**Status: working MVP on synthetic data. Real Hillstrom results and the real-data Streamlit UI remain unverified until run with the actual dataset.** This repository investigates a narrower question than purchase propensity: *Who should receive an email because it changes their purchase probability, rather than because they would have purchased anyway?*
+**Status: real-data analysis completed in GitHub Codespaces and reviewed from the dashboard screenshots. The repository does not include the downloaded CSV or generated SQLite database; reproduce the results locally before interpreting new runs.** This repository investigates a narrower question than purchase propensity: *Who should receive an email because it changes their purchase probability, rather than because they would have purchased anyway?*
 
 ## Business problem and dataset
 
@@ -64,7 +64,8 @@ pytest -q
 | Reproducible orchestration | `src/pipeline.py` | Ingest → validation → SQL analysis → modeling → atomically publish completed results |
 | Statistical estimates | `src/analysis.py` | SQL aggregates and control-group comparisons for campaigns and pretreatment segments |
 | Modeling and evaluation | `src/uplift.py` | Pairwise T-Learners, validation selection, held-out policy-value curves with uncertainty |
-| Business dashboard | `app.py` | Three interactive Plotly visualizations in a minimal Streamlit UI |
+| Business dashboard | `app.py` | Data-driven executive summary and three interactive Plotly visualizations (targeting figure includes a same-budget gap/uncertainty panel) |
+| Interpretation helpers | `src/presentation.py` | Tested, data-dependent plain-English descriptions of confidence intervals |
 | Testing | `tests/` | Pipeline/unit tests plus Streamlit widget smoke tests when installed |
 | Continuous integration | `.github/workflows/verify.yml` | Install and test the synthetic pipeline and dashboard on pushes/PRs |
 
@@ -87,16 +88,70 @@ pytest -q
 
 Use `pytest -q` to check validation, original-case CSV handling, source download fallback, interval calculations, features/leakage guard, policy math, end-to-end synthetic analysis, dashboard smoke tests (when Streamlit is installed) and failure-safe DB replacement.
 
-The GitHub Actions workflow runs these tests plus a separate synthetic pipeline/table check on pushes and pull requests. **Passing synthetic tests does not verify conclusions on real Hillstrom data.** To complete the real-data milestone, run `python -m src.pipeline`, inspect the source field in `meta` (it must be `hillstrom`), read the two real-data treatment estimates and CI values, inspect segment sample sizes and held-out targeting curves, and confirm the dashboard controls and charts in a browser. Only then add real observed results and screenshots here.
+The GitHub Actions workflow runs these tests plus a separate synthetic pipeline/table check on pushes and pull requests. **Passing synthetic tests does not verify conclusions on real Hillstrom data.** A real-data run was subsequently completed by the project owner in GitHub Codespaces. The database source was independently checked in that environment and returned `('source', 'hillstrom')`, `('n_rows', '64000')`. The figures below were transcribed from the resulting dashboard screenshots; the generated database is not committed, so rerun the pipeline to reproduce exact machine-readable estimates in a new environment.
 
-## Findings
+**Codespaces reproducibility check:**
 
-**Pending real-data execution.** No experiment result or model advantage is claimed from synthetic demo data. Record the actual conversion effects and 95% intervals for each campaign and the held-out AUUC gap before drawing conclusions.
+```bash
+python -m src.pipeline
+python -c 'import sqlite3; con=sqlite3.connect("data/retail.db"); print(con.execute("SELECT * FROM meta").fetchall()); print(con.execute("SELECT arm, outcome, diff, lo, hi FROM campaign_effects WHERE outcome="conversion"").fetchall()); print(con.execute("SELECT arm, test_auuc_gap, auuc_lo, auuc_hi FROM uplift_summary").fetchall())'
+streamlit run app.py --server.address 0.0.0.0
+```
+
+Check the `meta` source is `hillstrom` and the row count is `64000` before documenting real results. Synthetic smoke tests remain intentionally separate.
+
+## Findings: historical randomized email experiment (real data)
+
+The project owner executed the pipeline on the real 64,000-customer Hillstrom dataset in GitHub Codespaces, checked the SQLite `meta` table (`source=hillstrom`, `n_rows=64000`) and shared dashboard screenshots. **Values here are rounded exactly as displayed in that dashboard**, not claims that the dataset was independently re-run within this repository. Source experiment: **2008**, with outcomes observed for **two weeks**.
+
+### 1. Did either campaign affect customer behavior?
+
+The primary metric is **conversion** (whether an assigned customer made a purchase), reported as *percentage-point differences* relative to the independently randomized no-email group. The following intervals are the project's **unadjusted 95% Newcombe intervals** for differences in conversion rates:
+
+| Campaign vs. no email | Conversion-rate increase | Unadjusted 95% CI | Interpretation |
+| --- | ---: | ---: | --- |
+| Men's merchandise email | **+0.68 percentage points** | **+0.50 to +0.86 pp** | Positive experimental average effect on conversion |
+| Women's merchandise email | **+0.31 percentage points** | **+0.15 to +0.47 pp** | Positive experimental average effect on conversion |
+
+The dashboard's approximate group conversion rates were **0.57%** (no email), **1.25%** (men's email) and **0.89%** (women's email). These rounded group rates are descriptive; the reported differences above come from the dashboard's underlying calculations. The two emails were each compared separately with no email. **Do not conclude that the men's email would work better than the women's email for a given individual** from these two independent-looking comparisons: both share a control group, and that is a different research question.
+
+Secondary outcomes also increased relative to the no-email control in the displayed estimates:
+
+| Campaign | Website visits: estimated increase (95% CI) | Average spend per assigned customer: increase (95% CI) |
+| --- | ---: | ---: |
+| Men's email | +7.66 pp (+7.00 to +8.32) | +$0.77 (+$0.49 to +$1.05) |
+| Women's email | +4.52 pp (+3.89 to +5.16) | +$0.42 (+$0.17 to +$0.68) |
+
+**Average spend is not profit**. Email delivery costs, customer contact costs, product margins and long-term outcomes are unavailable. Report these as historical experimental effects, not present-day projections.
+
+### 2. Do some customer segments respond differently?
+
+Exploratory charts suggest variation by previous purchases, spending history, marketing channel and other pre-email characteristics. **They do not establish true differences in treatment effects between segments.** Individual subgroup intervals, small sample sizes, multiple exploratory comparisons and overlapping estimates can make apparently different points misleading. Confirm proposed segment differences with a direct interaction test and an independent randomized experiment before using them as business targeting rules.
+
+### 3. Did model-based targeting outperform random targeting?
+
+The model was selected using validation data, then evaluated once on a **held-out 20% pairwise test sample** for each campaign. Incremental purchases below are estimated from randomized outcomes, normalized **per 1,000 eligible customers**, not based solely on predicted probabilities. At an *illustrative* budget of emailing 30% of eligible customers:
+
+| Campaign | Model targeting | Random targeting (same budget) | Model minus random (pointwise 95% CI) |
+| --- | ---: | ---: | ---: |
+| Men's email | 0.91 | 1.97 | **-1.06** (-2.96 to +1.00) |
+| Women's email | 1.39 | 0.91 | **+0.49** (-1.03 to +2.29) |
+
+Both chosen-budget confidence intervals include zero. The *overall* area between the model and random curves (AUUC gap) also remains inconclusive on the held-out set:
+
+| Campaign | Held-out AUUC gap | Illustrative 95% bootstrap CI |
+| --- | ---: | ---: |
+| Men's email | -0.52 | -1.73 to +0.63 |
+| Women's email | +0.77 | -0.33 to +2.05 |
+
+**Main finding:** randomized evidence supports an average increase in purchases from *sending these emails*, but it does **not** establish that this T-Learner improves targeting relative to random selection. This is a valid, potentially useful negative/inconclusive machine-learning result. Do not present the 30% budget as a test-set-optimized choice; it was chosen as an illustration for interpreting the curves.
+
+**Budget comparison matters:** the "send to everyone" diamond shows what happens when **100%** are contacted, not an equal-cost alternative to contacting the top 30%. The comparison for ranking quality is the model versus random targeting **at the same share emailed**. The dashboard now displays this difference and its confidence interval directly below the cumulative impact chart. No send costs or ROI are estimated.
 
 ## Limitations
 
 - A single **2008 experiment** with a two-week outcome window; it is not current customer behavior or proof of deployment value today.
 - Conversion is rare, so personalized targeting results can be highly variable. Positive validation performance does not imply a reliable held-out benefit.
-- Segment comparisons, two campaigns, and multiple targeting budgets introduce multiplicity and selection risk; do not cherry-pick a favorable budget from the test set.
-- Bootstrap bands are conditional on the selected model and one held-out experiment; they do not measure end-to-end deployment uncertainty.
+- Segment comparisons, two campaigns, and multiple targeting budgets introduce multiplicity and selection risk. No multiple-comparison adjustments or formal segment-interaction tests are included; do not cherry-pick a favorable budget from the test set.
+- Bootstrap bands are **pointwise**, conditional on the selected model and one held-out experiment; they do not cover model-selection variability, multiple budget searches or end-to-end deployment uncertainty.
 - We do **not** model campaign-send cost, profitability or real-time policy deployment. A fresh randomized rollout would be needed before business use.
