@@ -11,7 +11,7 @@ from .config import DB, ROOT
 PUBLIC_DB = ROOT / 'data' / 'dashboard.db'
 TABLES = ('meta', 'arm_stats', 'campaign_effects', 'segment_effects',
           'uplift_curves', 'uplift_summary', 'uplift_model_selection',
-          'uplift_quintiles')
+          'uplift_quintiles', 'validation_checks')
 
 
 def export(db=DB, dest=PUBLIC_DB):

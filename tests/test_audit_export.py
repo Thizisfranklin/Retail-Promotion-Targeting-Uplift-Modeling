@@ -43,3 +43,12 @@ def test_export_only_aggregates(tmp_path, monkeypatch):
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert tables == set(TABLES)
     assert 'customers' not in tables and 'uplift_holdout' not in tables
+
+
+def test_public_export_covers_every_dashboard_table():
+    import re
+    from pathlib import Path
+    app = (Path(__file__).resolve().parents[1] / 'app.py').read_text()
+    reads = set(re.findall(r'load\("([a-z_]+)"\)', app))
+    assert reads, 'Static dashboard reads should be discoverable'
+    assert reads <= set(TABLES), f'Dashboard requires missing public tables: {reads - set(TABLES)}'
