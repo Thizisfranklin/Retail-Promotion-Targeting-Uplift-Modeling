@@ -1,0 +1,31 @@
+name: Verify retail uplift MVP
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  reproducible-synthetic-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: pytest -q
+      - run: python -m src.pipeline --synthetic
+      - name: Verify all expected tables and synthetic label
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from src.config import DB
+          with sqlite3.connect(DB) as con:
+              tables = {'customers', 'campaign_effects', 'segment_effects', 'uplift_curves', 'uplift_summary'}
+              found = {r[0] for r in con.execute('SELECT name FROM sqlite_master WHERE type="table"')}
+              assert tables.issubset(found), tables - found
+              assert con.execute('SELECT value FROM meta WHERE key="source"').fetchone()[0] == 'synthetic'
+          PY
+      - name: Dashboard controls smoke test
+        run: python -m pytest tests/test_dashboard.py -q
