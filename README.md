@@ -48,7 +48,7 @@ The pipeline downloads the original dataset, builds a local SQLite database, cal
 
 ## Share the dashboard
 
-For a public, permanent link, follow the short [Streamlit deployment guide](docs/deploy.md). It explains how to export only verified **aggregate results** and deploy on Streamlit Community Cloud, without sharing customer-level data. After deployment, add your `*.streamlit.app` URL here and in GitHub's **About → Website** field.
+See [Streamlit](https://retail-promotion-targeting-uplift-modeling-jdjd8epuvzztn6kxjpe.streamlit.app/)
 
 ## A note on interpretation
 
