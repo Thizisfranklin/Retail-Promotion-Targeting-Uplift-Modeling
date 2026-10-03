@@ -46,7 +46,7 @@ The pipeline downloads the original dataset, builds a local SQLite database, cal
 
 **Want to check the work rather than trust the charts?** See [How the analysis works and how to audit it](docs/understand-and-check.md). `python -m src.audit --require-real` independently recalculates group results from SQLite, checks significance and rechecks saved held-out scores when present. Run `pytest -q` for automated code checks. Neither step substitutes for evaluating the statistical assumptions or replicating a new marketing experiment.
 
-## Share the dashboard
+## Dashboard
 
 See [Streamlit](https://retail-promotion-targeting-uplift-modeling-jdjd8epuvzztn6kxjpe.streamlit.app/)
 
